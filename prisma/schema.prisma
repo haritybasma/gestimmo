@@ -1,0 +1,201 @@
+// Schéma de données — GestImmo (multi-sociétés)
+//
+// Modèle « façon Odoo » : une base unique, isolation par organisation, plusieurs
+// sociétés par organisation, chacune avec sa devise et son pays. Les
+// immobilisations sont rattachées à une société ; les localisations et
+// catégories sont partagées au niveau de l'organisation (un même lieu physique
+// peut contenir des biens de plusieurs sociétés).
+//
+// Portable SQLite (dev) <-> PostgreSQL (prod) : on utilise des String au lieu
+// d'enums (non supportés sur SQLite). Les valeurs autorisées sont validées côté
+// application.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- Organisation (le compte / tenant) --------------------------------------
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  users      User[]
+  companies  Company[]
+  categories Category[]
+  locations  Location[]
+  assets     Asset[]
+  campaigns  InventoryCampaign[]
+}
+
+// --- Société ----------------------------------------------------------------
+
+model Company {
+  id             String  @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  name     String
+  country  String // ISO 3166-1 alpha-2
+  currency String // ISO 4217
+  legalId  String? // ICE / IF / RC / SIREN…
+  address  String?
+  isDefault Boolean @default(false)
+  createdAt DateTime @default(now())
+
+  assets    Asset[]
+  campaigns InventoryCampaign[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+}
+
+// --- Utilisateurs -----------------------------------------------------------
+
+model User {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         String   @default("USER") // ADMIN | USER
+  createdAt    DateTime @default(now())
+
+  campaigns InventoryCampaign[] @relation("CampaignCreatedBy")
+  scans     InventoryScan[]     @relation("ScanBy")
+
+  @@index([organizationId])
+}
+
+// --- Référentiels (partagés au niveau organisation) -------------------------
+
+model Category {
+  id             String @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  code            String
+  name            String
+  defaultDuration Int?
+  defaultMethod   String  @default("LINEAR") // LINEAR | DEGRESSIVE | NONE
+  degressiveCoef  Float?
+  assets          Asset[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+}
+
+model Location {
+  id             String @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  code     String
+  name     String
+  parentId String?
+  parent   Location?  @relation("LocationTree", fields: [parentId], references: [id])
+  children Location[] @relation("LocationTree")
+
+  assets       Asset[]
+  foundInScans InventoryScan[] @relation("FoundLocation")
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+}
+
+// --- Immobilisations --------------------------------------------------------
+
+model Asset {
+  id             String @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  companyId      String
+  company        Company @relation(fields: [companyId], references: [id])
+
+  code        String // identifiant imprimé dans le code-barres
+  designation String
+  categoryId  String?
+  category    Category? @relation(fields: [categoryId], references: [id])
+  locationId  String?
+  location    Location? @relation(fields: [locationId], references: [id])
+
+  acquisitionDate  DateTime
+  acquisitionValue Float
+  residualValue    Float   @default(0)
+  duration         Int
+  method           String  @default("LINEAR") // LINEAR | DEGRESSIVE | NONE
+  degressiveCoef   Float?
+
+  serialNumber String?
+  supplier     String?
+  notes        String?
+  status       String    @default("IN_SERVICE") // IN_SERVICE | DISPOSED
+  disposedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  scans InventoryScan[]
+
+  @@unique([organizationId, code])
+  @@index([companyId])
+  @@index([categoryId])
+  @@index([locationId])
+}
+
+// --- Inventaires ------------------------------------------------------------
+
+model InventoryCampaign {
+  id             String @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  companyId      String? // null = toutes les sociétés de l'organisation
+  company        Company? @relation(fields: [companyId], references: [id])
+
+  reference String
+  name      String
+  startDate DateTime  @default(now())
+  closedAt  DateTime?
+  status    String    @default("OPEN") // OPEN | CLOSED
+  notes     String?
+
+  createdById String?
+  createdBy   User?   @relation("CampaignCreatedBy", fields: [createdById], references: [id])
+
+  scans InventoryScan[]
+
+  @@unique([organizationId, reference])
+  @@index([organizationId])
+  @@index([companyId])
+}
+
+model InventoryScan {
+  id         String @id @default(cuid())
+  campaignId String
+  campaign   InventoryCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  assetId     String?
+  asset       Asset?  @relation(fields: [assetId], references: [id])
+  scannedCode String
+
+  foundLocationId String?
+  foundLocation   Location? @relation("FoundLocation", fields: [foundLocationId], references: [id])
+
+  condition String? // BON | ENDOMMAGE | HORS_SERVICE
+  notes     String?
+
+  scannedById String?
+  scannedBy   User?    @relation("ScanBy", fields: [scannedById], references: [id])
+  scannedAt   DateTime @default(now())
+
+  @@index([campaignId])
+  @@index([assetId])
+}

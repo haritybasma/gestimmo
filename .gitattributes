@@ -1,0 +1,15 @@
+# Normalisation des fins de ligne.
+# Par défaut, texte normalisé en LF dans le dépôt.
+* text=auto eol=lf
+
+# Fichiers exécutés sur le serveur Linux : toujours en LF.
+*.sh text eol=lf
+*.service text eol=lf
+Caddyfile text eol=lf
+
+# Fichiers binaires : jamais modifiés.
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary

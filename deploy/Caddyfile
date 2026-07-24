@@ -1,0 +1,29 @@
+# Caddy — reverse proxy avec HTTPS automatique (Let's Encrypt).
+# Placer ce fichier dans /etc/caddy/Caddyfile puis : systemctl reload caddy
+#
+# Prérequis : les enregistrements DNS A de gestimmohub.com et www.gestimmohub.com
+# doivent pointer vers l'IP du VPS (213.130.144.56).
+
+{
+	# Email utilisé pour les certificats Let's Encrypt (avis d'expiration…)
+	email s.elkhiati@syn.ma
+}
+
+# Redirige www vers le domaine principal
+www.gestimmohub.com {
+	redir https://gestimmohub.com{uri} permanent
+}
+
+gestimmohub.com {
+	encode gzip
+	# Transmet à l'application qui écoute en local
+	reverse_proxy 127.0.0.1:3000
+
+	# En-têtes de sécurité (complètent ceux de l'application)
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		-Server
+	}
+}

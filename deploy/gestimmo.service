@@ -1,0 +1,24 @@
+[Unit]
+Description=GestImmo (application Next.js)
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=gestimmo
+Group=gestimmo
+WorkingDirectory=/opt/gestimmo/app
+# Variables d'environnement (DATABASE_URL, AUTH_SECRET) lues depuis le .env
+EnvironmentFile=/opt/gestimmo/app/.env
+Environment=NODE_ENV=production
+# L'app n'écoute que sur la boucle locale : seul Caddy (reverse proxy) l'expose
+ExecStart=/usr/bin/npx next start -H 127.0.0.1 -p 3000
+Restart=always
+RestartSec=5
+# Durcissement du service
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target
