@@ -15,10 +15,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
-
 // --- Organisation (le compte / tenant) --------------------------------------
 
 model Organization {
